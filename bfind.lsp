@@ -1201,38 +1201,30 @@
   (and (>= c 19968) (<= c 40959))
 )
 ;修改后的_ReplaceText函数在处理中文汉字时将不再依赖正则表达式（因为正则表达式中的\b不支持中文汉字）
+
+
 (defun _ReplaceText (newstr oldstr str case whole)
   (if whole
     (let ((index 0) (result "") left right)
       (while (setq index (vl-string-search oldstr str index))
-        (setq left (if (> index 0) (ascii (substr str index 1)) 0))
+        (setq left (if (> index 0) (substr str (- index) 1) ""))
         (setq right (if (< (+ index (strlen oldstr)) (strlen str))
-                        (ascii (substr str (+ index (strlen oldstr) 1) 1))
-                        0
-                      )
-        )
-        (if (and (or (not left) (not (_IsChinese left)) (<= left 32))
-                 (or (not right) (not (_IsChinese right)) (<= right 32)))
+                        (substr str (+ index (strlen oldstr)) 1)
+                        ""))
+        (if (or (not (and (vl-string-left-trim "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789" left)
+                          (vl-string-left-trim "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789" right)))
+                (and (_IsChinese (char left)) (_IsChinese (char right))))
           (progn
             (setq result (strcat result (substr str 1 index) newstr))
             (setq str (substr str (+ index (strlen oldstr))))
             (setq index 0)
           )
-          (progn
-            (setq result (strcat result (substr str 1 (+ index 1))))
-            (setq str (substr str (+ index 1)))
-            (setq index 1)
-          )
+          (setq index (+ index 1))
         )
       )
       (setq str (strcat result str))
     )
-    (progn
-      (if (_RegExExecute (if whole (strcat "\\b" oldstr "\\b") oldstr) str case)
-        (setq *ReplaceFlag* T)
-      )
-      (setq str (_RegExReplace newstr oldstr str case))
-    )
+    (setq str (_RegExReplace newstr oldstr str case))
   )
   str
 )
