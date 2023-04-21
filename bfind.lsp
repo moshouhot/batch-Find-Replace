@@ -1197,38 +1197,102 @@
 ;;-------------------------------------------------------------------------------;;
 
 
-(defun _IsChinese (c)
-  (and (>= c 19968) (<= c 40959))
+;;当需要全字匹配时调用repall函数
+;; repall 函数：
+;; 用于在 AutoCAD 图形中替换文本。
+;; 参数：
+;; - str: 选择集，包含要替换文本的 AutoCAD 对象。
+;; - oldstr: 要替换的旧字符串。
+;; - newstr: 要替换为的新字符串。
+
+;(defun repall (str oldstr newstr / ss  ct0 edata etext )
+;  ;; 初始化计数器和选择集长度。
+;  (setq ssl (sslength ss)    ct0 0)
+;
+;  ;; 遍历选择集中的每个对象。
+;  (while (< ct0 ssl)
+;    ;; 获取对象的实体数据和文本值。
+;    (setq edata (entget (ssname ss ct0))       etext (cdr (assoc 1 edata)))
+;
+;    ;; 如果对象的文本值等于旧字符串，则替换为新字符串。
+;    (if (= oldch etext)  (entmod (subst (cons 1 newch) (assoc 1 edata) edata)))
+;
+;    ;; 递增计数器。
+;    (setq ct0 (1+ ct0))
+;  )
+;)
+
+(defun repall (str oldstr newstr / ssl ct0 edata etext )
+  ;; 初始化计数器和选择集长度。
+  (setq ssl (sslength str)    ct0 0)
+
+  ;; 遍历选择集中的每个对象。
+  (while (< ct0 ssl)
+    ;; 获取对象的实体数据和文本值。
+    (setq edata (entget (ssname str ct0))       etext (cdr (assoc 1 edata)))
+
+    ;; 如果对象的文本值等于旧字符串，则替换为新字符串。
+    (if (= oldstr etext)  (entmod (subst (cons 1 newstr) (assoc 1 edata) edata)))
+
+    ;; 递增计数器。
+    (setq ct0 (1+ ct0))
+  )
 )
-;修改后的_ReplaceText函数在处理中文汉字时将不再依赖正则表达式（因为正则表达式中的\b不支持中文汉字）
-
-
+; _ReplaceText 函数：
+; 用于替换字符串中的某些文本。
+; 参数：
+; - newstr: 要替换为的新字符串。
+; - oldstr: 要替换的旧字符串。
+; - str: 要在其中执行替换操作的原始字符串。
+; - case: 布尔值，用于指示是否区分大小写（如果为真，则区分大小写；如果为假，则不区分大小写）。
+; - whole: 布尔值，用于指示是否仅替换单词（如果为真，则仅替换单词；如果为假，则替换所有匹配项）。
 (defun _ReplaceText (newstr oldstr str case whole)
   (if whole
-    (let ((index 0) (result "") left right)
-      (while (setq index (vl-string-search oldstr str index))
-        (setq left (if (> index 0) (substr str (- index) 1) ""))
-        (setq right (if (< (+ index (strlen oldstr)) (strlen str))
-                        (substr str (+ index (strlen oldstr)) 1)
-                        ""))
-        (if (or (not (and (vl-string-left-trim "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789" left)
-                          (vl-string-left-trim "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789" right)))
-                (and (_IsChinese (char left)) (_IsChinese (char right))))
-          (progn
-            (setq result (strcat result (substr str 1 index) newstr))
-            (setq str (substr str (+ index (strlen oldstr))))
-            (setq index 0)
-          )
-          (setq index (+ index 1))
-        )
+    (progn
+      (foreach pattern '("\\\\" "\\^" "\\$" "\\+" "\\?" "\\." "\\(" "\\)" "\\|" "\\{" "\\}" "\\," "\\[" "\\]")
+        (setq oldstr (_RegExReplace pattern pattern oldstr))
       )
-      (setq str (strcat result str))
+      (setq oldstr (_RegExReplace "$1\\*" "([^衇|^)\\*" oldstr))
+      (setq oldstr (strcat "\\b" oldstr "\\b"))
     )
-    (setq str (_RegExReplace newstr oldstr str case))
   )
-  str
+  (if (_RegExExecute oldstr str case)
+    (setq *ReplaceFlag* T)
+  )
+  (_RegExReplace newstr oldstr str case)
 )
-;;-------------------------------------------------------------------------------;;
+	
+	
+	
+	
+	;(defun _ReplaceText ( newstr oldstr str case whole )
+ ;   (if (_RegExExecute (if whole (strcat "\\b" oldstr "\\b") oldstr) str case)
+	;	(setq *ReplaceFlag* T)
+ ;   )
+ ;   (_RegExReplace newstr oldstr str case)
+ ; )
+
+;(defun _ReplaceText ( newstr oldstr str case whole )
+;  (if whole
+;    (progn
+;      (repall str oldstr newstr) ; 在这里，我们传递了正确的参数。
+;    )
+;    (progn
+;      (if (_RegExExecute (if whole (strcat "\\b" oldstr "\\b") oldstr) str case)
+;        (setq *ReplaceFlag* T)
+;      )
+;      (_RegExReplace newstr oldstr str case)
+;    )
+;  )
+;)	
+	
+;; _Replace 函数：
+;; 用于批量替换字符串中的一系列文本。
+;; 参数：
+;; - replacements: 一个列表，其中每个元素都是一个由两个元素组成的列表，包括旧字符串和新字符串。
+;; - string: 要在其中执行替换操作的原始字符串。
+;; - case: 布尔值，用于指示是否区分大小写（如果为真，则区分大小写；如果为假，则不区分大小写）。
+;; - whole: 布尔值，用于指示是否仅替换单词（如果为真，则仅替换单词；如果为假，则替换所有匹配项）。
 (defun _Replace (replacements string case whole)
   (foreach x replacements
     (setq string (_ReplaceText (cdr x) (car x) string case whole))
@@ -1236,10 +1300,21 @@
   string
 )
 
-;;-------------------------------------------------------------------------------;;
 
+;;-------------------------------------------------------------------------------;;
+;; _ReplaceObject 函数：
+;; 用于替换 AutoCAD 对象中的文本属性。
+;; 参数：
+;; - dwg: 当前处理的图形对象。
+;; - obj: 要进行文本替换的 AutoCAD 对象。
+;; - lst: 替换列表，包含旧文本和新文本的配对。
+;; - bit: 控制替换功能的位掩码。
+;; - lkl: 图层过滤列表。
+;; - rep: 布尔值，控制是否实际进行替换。
   (defun _ReplaceObject ( dwg obj lst bit lkl rep / nme os ns )
+		;; 获取对象的类名。
     (setq nme (vla-get-Objectname obj))
+		;; 检查对象是否满足过滤条件。
     (cond
       (
         (not
@@ -1248,12 +1323,14 @@
           )
         )
         (cond
+					;; 如果对象是带有属性的块引用。
           (
             (and
               (eq "AcDbBlockReference" nme)
               (eq :vlax-true (vla-get-HasAttributes obj))
               (= 32 (logand 32 bit))
             )
+						;; 遍历每个属性，替换符合条件的文本。
             (foreach att (vlax-invoke obj 'GetAttributes)
               (if
                 (not
@@ -1263,12 +1340,14 @@
                   )
                 )
                 (progn
+									;; 记录替换信息。
                   (setq ReportLst
                     (cons
                       (list dwg os ns "Attribute" (vl-prin1-to-string (vla-get-Handle att)) (vla-get-TagString att))
                       ReportLst
                     )
                   )
+									;; 如果需要实际替换，执行替换操作。
                   (if rep
                     (progn
                       (vla-put-InsertionPoint att (vlax-3D-point (_CalcInsPt att ns)))
@@ -1279,11 +1358,13 @@
               )
             )
           )
+					;; 如果对象是尺寸对象。
           (
             (and
               (wcmatch (strcase nme) "*DIMENSION*")
               (= 64 (logand 64 bit))
             )
+						;; 替换符合条件的尺寸文本。
             (if
               (and (not (eq "" (setq os (_GetTextString obj))))
                 (not
@@ -1293,16 +1374,19 @@
                 )
               )
               (progn
+								;; 记录替换信息。
                 (setq ReportLst
                   (cons
                     (list dwg os ns "Dimension" (vl-prin1-to-string (vla-get-Handle obj)))
                     ReportLst
                   )
                 )
+								;; 如果需要实际替换，执行替换操作。
                 (if rep (vla-put-TextOverride obj ns))
               )
             )
           )
+					 ;; 如果对象是 MText、Text 或 Multileader 对象。
           (
             (or
               (and
@@ -1318,20 +1402,23 @@
                 (= 128 (logand 128 bit))
               )
             )
+						;; 替换符合条件的文本。
             (if (and (setq os (_GetTextString obj))
-                     (not (eq os (setq ns (_Replace lst os (= 1 (logand 1 bit)) (= 4 (logand 4 bit))))))
+									;在这个调用中，第三个参数 (= 1 (logand 1 bit)) 控制是否区分大小写，第四个参数 (= 4 (logand 4 bit)) 控制是否进行整词搜索。
+									(not (eq os (setq ns (_Replace lst os (= 1 (logand 1 bit)) (= 4 (logand 4 bit))))))
                 )
               (progn
+								;; 记录替换信息。
                 (setq ReportLst
                   (cons
                     (list dwg os ns
                       (cdr
                         (assoc nme
-                         '(
-                            ("AcDbMText"   . "MText")
-                            ("AcDbText"    . "Text")
-                            ("AcDbMLeader" . "Multileader")
-                          )
+													'(
+														 ("AcDbMText"   . "MText")
+														 ("AcDbText"    . "Text")
+														 ("AcDbMLeader" . "Multileader")
+													 )
                         )
                       )
                       (vl-prin1-to-string (vla-get-Handle obj))
@@ -1339,6 +1426,7 @@
                     ReportLst
                   )
                 )
+								;; 如果需要实际替换，执行替换操作。
                 (if rep
                   (progn
                     (if (= "AcDbText" nme)
@@ -1350,11 +1438,13 @@
               )
             )
           )
+					;; 如果对象是表格
           (
             (and
               (eq "AcDbTable" nme)
               (= 256 (logand 256 bit))
             )
+						;; 遍历每个单元格，替换符合条件的文本。
             (
               (lambda ( row )
                 (while (not (minusp (setq row (1- row))))
@@ -1368,6 +1458,7 @@
                               (setq ns (_Replace lst os (= 1 (logand 1 bit)) (= 4 (logand 4 bit))))
                             )
                           )
+													;; 记录替换信息。
                           (progn
                             (setq ReportLst
                               (cons
