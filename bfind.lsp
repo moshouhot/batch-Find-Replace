@@ -1197,48 +1197,31 @@
 ;;-------------------------------------------------------------------------------;;
 
 
-;;当需要全字匹配时调用repall函数
-;; repall 函数：
-;; 用于在 AutoCAD 图形中替换文本。
-;; 参数：
-;; - str: 选择集，包含要替换文本的 AutoCAD 对象。
-;; - oldstr: 要替换的旧字符串。
-;; - newstr: 要替换为的新字符串。
+;; repall 函数，这是repall 函数可以正确进行整词替换，因为它是针对 AutoCAD 中的单独文本实体设计的。在每次迭代中，repall 函数会检查文本实体的完整文本值，然后只有当该文本值等于 oldch 时，才会进行替换。;;
+; 用于在 AutoCAD 图形中替换文本。
+; 参数：
+; - SS: 选择集，包含要替换文本的 AutoCAD 对象。
+; - oldch: 要替换的旧字符串。
+; - newch: 要替换为的新字符串。
+(defun repall (SS oldch newch / ss  ct0 edata etext )
+  ; 初始化计数器和选择集长度。
+  (setq ssl (sslength ss)    ct0 0)
 
-;(defun repall (str oldstr newstr / ss  ct0 edata etext )
-;  ;; 初始化计数器和选择集长度。
-;  (setq ssl (sslength ss)    ct0 0)
-;
-;  ;; 遍历选择集中的每个对象。
-;  (while (< ct0 ssl)
-;    ;; 获取对象的实体数据和文本值。
-;    (setq edata (entget (ssname ss ct0))       etext (cdr (assoc 1 edata)))
-;
-;    ;; 如果对象的文本值等于旧字符串，则替换为新字符串。
-;    (if (= oldch etext)  (entmod (subst (cons 1 newch) (assoc 1 edata) edata)))
-;
-;    ;; 递增计数器。
-;    (setq ct0 (1+ ct0))
-;  )
-;)
-
-(defun repall (str oldstr newstr / ssl ct0 edata etext )
-  ;; 初始化计数器和选择集长度。
-  (setq ssl (sslength str)    ct0 0)
-
-  ;; 遍历选择集中的每个对象。
+  ; 遍历选择集中的每个对象。
   (while (< ct0 ssl)
-    ;; 获取对象的实体数据和文本值。
-    (setq edata (entget (ssname str ct0))       etext (cdr (assoc 1 edata)))
+    ; 获取对象的实体数据和文本值。
+    (setq edata (entget (ssname ss ct0))       etext (cdr (assoc 1 edata)))
 
-    ;; 如果对象的文本值等于旧字符串，则替换为新字符串。
-    (if (= oldstr etext)  (entmod (subst (cons 1 newstr) (assoc 1 edata) edata)))
+    ; 如果对象的文本值等于旧字符串，则替换为新字符串。
+    (if (= oldch etext)  (entmod (subst (cons 1 newch) (assoc 1 edata) edata)))
 
-    ;; 递增计数器。
+    ; 递增计数器。
     (setq ct0 (1+ ct0))
   )
 )
-; _ReplaceText 函数：
+
+
+; _ReplaceText 函数（可以正确使用英文全词匹配和中文普通替换）：
 ; 用于替换字符串中的某些文本。
 ; 参数：
 ; - newstr: 要替换为的新字符串。
@@ -1246,46 +1229,51 @@
 ; - str: 要在其中执行替换操作的原始字符串。
 ; - case: 布尔值，用于指示是否区分大小写（如果为真，则区分大小写；如果为假，则不区分大小写）。
 ; - whole: 布尔值，用于指示是否仅替换单词（如果为真，则仅替换单词；如果为假，则替换所有匹配项）。
-(defun _ReplaceText (newstr oldstr str case whole)
+(defun _ReplaceText1 (newstr oldstr str case whole / origstr)
+  ;; If whole is true, perform whole word matching using "\\b" regex pattern
+  (if whole
+    (setq oldstr (strcat "\\b" oldstr "\\b"))
+  )
+
+  ;; Perform the regex search and replace
+  (if (_RegExExecute oldstr str case)
+    (progn
+      (setq *ReplaceFlag* T)
+      (_RegExReplace newstr oldstr str case)
+    )
+    str
+  )
+)
+
+
+; _ReplaceText 函数（测试）：	
+(defun _ReplaceText (newstr oldstr str case whole / origstr)
+  ;; 如果 whole 为真，则使用正则表达式匹配整个单词并替换
   (if whole
     (progn
-      (foreach pattern '("\\\\" "\\^" "\\$" "\\+" "\\?" "\\." "\\(" "\\)" "\\|" "\\{" "\\}" "\\," "\\[" "\\]")
-        (setq oldstr (_RegExReplace pattern pattern oldstr))
-      )
-      (setq oldstr (_RegExReplace "$1\\*" "([^衇|^)\\*" oldstr))
+      ;; 添加正则表达式模式以匹配整个单词
       (setq oldstr (strcat "\\b" oldstr "\\b"))
+
+      ;; 使用正则表达式执行替换操作
+      (if (setq str (vl-string-regex-replace oldstr str newstr case))
+        (setq *ReplaceFlag* T)
+      )
+    )
+    ;; 否则，执行正则表达式搜索和替换
+    (progn
+      (if (_RegExExecute oldstr str case)
+        (progn
+          (setq *ReplaceFlag* T)
+          (setq str (_RegExReplace newstr oldstr str case))
+        )
+      )
     )
   )
-  (if (_RegExExecute oldstr str case)
-    (setq *ReplaceFlag* T)
-  )
-  (_RegExReplace newstr oldstr str case)
+  ;; 返回替换后的字符串
+  str
 )
-	
-	
-	
-	
-	;(defun _ReplaceText ( newstr oldstr str case whole )
- ;   (if (_RegExExecute (if whole (strcat "\\b" oldstr "\\b") oldstr) str case)
-	;	(setq *ReplaceFlag* T)
- ;   )
- ;   (_RegExReplace newstr oldstr str case)
- ; )
 
-;(defun _ReplaceText ( newstr oldstr str case whole )
-;  (if whole
-;    (progn
-;      (repall str oldstr newstr) ; 在这里，我们传递了正确的参数。
-;    )
-;    (progn
-;      (if (_RegExExecute (if whole (strcat "\\b" oldstr "\\b") oldstr) str case)
-;        (setq *ReplaceFlag* T)
-;      )
-;      (_RegExReplace newstr oldstr str case)
-;    )
-;  )
-;)	
-	
+
 ;; _Replace 函数：
 ;; 用于批量替换字符串中的一系列文本。
 ;; 参数：
