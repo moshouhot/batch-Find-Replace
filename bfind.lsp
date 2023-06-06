@@ -467,7 +467,7 @@
             "//                                                                               //"
             "//  BFind.dcl 与 BFind.lsp 配合使用。                                          //"
             "//-------------------------------------------------------------------------------//"
-            "//  作者：Lee Mac，版权所有©2011 - www.lee-mac.com                             //"
+            "//  作者：Lee Mac，版权所有?2011 - www.lee-mac.com                             //"
             "//-------------------------------------------------------------------------------//"
             ""
             "//-------------------------------------------------------------------------------//"
@@ -1220,6 +1220,35 @@
   )
 )
 
+;（完美）：	
+(defun repall1 (textList oldch newch / newTextList etext)
+  (setq newTextList nil)
+  (foreach etext textList
+    (if (= oldch etext)
+      (setq newTextList (cons newch newTextList))
+      (setq newTextList (cons etext newTextList))
+    )
+  )
+  (reverse newTextList)
+)	
+;（测试）：	
+; repall 函数：
+; 用于替换一个字符串列表中的文本。
+; 参数：
+; - textList: 包含要替换文本的字符串列表。
+; - oldch: 要替换的旧字符串。
+; - newch: 要替换为的新字符串。
+; - case: 是否区分大小写，如果为真，则区分大小写。 ** 修改：增加了此参数
+(defun repall2 (textList oldch newch case / newTextList etext) 
+  (setq newTextList nil)
+  (foreach etext textList
+    (if (if case (wcmatch etext oldch) (equal (strcase etext) (strcase oldch))) ; ** 修改：使用wcmatch或equal进行大小写敏感或不敏感的匹配
+      (setq newTextList (cons newch newTextList))
+      (setq newTextList (cons etext newTextList))
+    )
+  )
+  (reverse newTextList)
+)
 
 ; _ReplaceText 函数（可以正确使用英文全词匹配和中文普通替换）：
 ; 用于替换字符串中的某些文本。
@@ -1245,19 +1274,36 @@
   )
 )
 
-
-; _ReplaceText 函数（测试）：	
-(defun _ReplaceText (newstr oldstr str case whole / origstr)
-  ;; 如果 whole 为真，则使用正则表达式匹配整个单词并替换
+; _ReplaceText 函数（完美）：	
+(defun _ReplaceText2 (newstr oldstr str case whole / origstr)
+  ;; 如果 whole 为真，则使用 repall 函数进行全字匹配替换
   (if whole
     (progn
-      ;; 添加正则表达式模式以匹配整个单词
-      (setq oldstr (strcat "\\b" oldstr "\\b"))
-
-      ;; 使用正则表达式执行替换操作
-      (if (setq str (vl-string-regex-replace oldstr str newstr case))
-        (setq *ReplaceFlag* T)
+      (setq strList (list str))
+      (setq strList (repall1 strList oldstr newstr))
+      (setq str (car strList))
+    )
+    ;; 否则，执行正则表达式搜索和替换
+    (progn
+      (if (_RegExExecute oldstr str case)
+        (progn
+          (setq *ReplaceFlag* T)
+          (setq str (_RegExReplace newstr oldstr str case))
+        )
       )
+    )
+  )
+  ;; 返回替换后的字符串
+  str
+)
+; _ReplaceText 函数（测试）：
+(defun _ReplaceText (newstr oldstr str case whole / origstr)
+  ;; 如果 whole 为真，则使用 repall 函数进行全字匹配替换
+  (if whole
+    (progn
+      (setq strList (list str)) ; ** 修改：创建一个包含当前字符串的列表
+      (setq strList (repall2 strList oldstr newstr case)) ; ** 修改：调用repall函数进行全字匹配替换，传入case参数
+      (setq str (car strList)) ; ** 修改：从返回的列表中获取替换后的字符串
     )
     ;; 否则，执行正则表达式搜索和替换
     (progn
@@ -2082,7 +2128,7 @@
 
 (vl-load-com)
 (princ)
-(princ "\n:: BFind.lsp | Version 2.0 | ?Lee Mac 2011 www.lee-mac.com ::")
+(princ "\n:: BFind.lsp | Version 2.1 tiger | ?Lee Mac 2011 www.lee-mac.com ::")
 (princ "\n:: Type \"BFind\" to Invoke ::")
 (princ)
 
